@@ -1,0 +1,13 @@
+node_modules
+.turbo
+dist
+.next
+coverage
+*.env*.local
+.env
+.env.production
+*.log
+prisma/dev.db
+prisma/dev.db-journal
+.DS_Store
+Thumbs.db

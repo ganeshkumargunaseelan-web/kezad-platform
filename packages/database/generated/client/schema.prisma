@@ -1,0 +1,1091 @@
+// ─── KEZAD Utilities Management Platform — Prisma Schema ─────────────────────
+// PostgreSQL | All timestamps UTC | Soft deletes on critical entities
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ════════════════════════════════════════════════════════════
+// ENUMS
+// ════════════════════════════════════════════════════════════
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  OPERATOR
+  CUSTOMER
+}
+
+enum UtilityType {
+  GAS
+  POWER
+  WATER
+  DISTRICT_COOLING
+}
+
+enum ContractStatus {
+  DRAFT
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+  TERMINATED
+  EXPIRED
+}
+
+enum ContractAmendmentType {
+  QUANTITY_CHANGE
+  PRICE_CHANGE
+  TERM_EXTENSION
+  TERMINATION
+  OTHER
+}
+
+enum MeterType {
+  GAS
+  POWER
+  WATER
+  COOLING
+  SUB_METER
+}
+
+enum DataQualityFlag {
+  GOOD
+  BAD
+  SUSPECT
+  ESTIMATED
+  MANUAL
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+  DISPUTED
+  CANCELLED
+  VOID
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum WorkflowType {
+  CONTRACT_APPROVAL
+  CONSUMPTION_PROFILE_UPDATE
+  BILLING_DISPUTE
+  SERVICE_ACTIVATION
+  SERVICE_DEACTIVATION
+  TARIFF_CHANGE_APPROVAL
+  INVOICE_APPROVAL
+}
+
+enum WorkflowStatus {
+  PENDING
+  IN_PROGRESS
+  APPROVED
+  REJECTED
+  SENT_BACK
+  CANCELLED
+}
+
+enum WorkflowActionType {
+  SUBMIT
+  APPROVE
+  REJECT
+  SEND_BACK
+  ESCALATE
+  CANCEL
+}
+
+enum ServiceRequestType {
+  ACTIVATION
+  DEACTIVATION
+  TECHNICAL_ISSUE
+  METER_VERIFICATION
+  OTHER
+}
+
+enum ServiceRequestStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  CANCELLED
+}
+
+enum NotificationType {
+  BILLING_ALERT
+  PAYMENT_DUE
+  CONSUMPTION_ANOMALY
+  CONTRACT_EXPIRY
+  WORKFLOW_ACTION_REQUIRED
+  SYSTEM_ALERT
+  OTP
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  IN_APP
+  PUSH
+}
+
+enum TariffType {
+  VOLUME_BASED
+  TIME_OF_USE
+  DYNAMIC
+  MULTI_TIER
+  DUAL_STRUCTURE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  APPROVE
+  REJECT
+  EXPORT
+}
+
+enum AdapterSyncStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+// ════════════════════════════════════════════════════════════
+// AUTH & USERS
+// ════════════════════════════════════════════════════════════
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         UserRole  @default(OPERATOR)
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
+  phone        String?
+  department   String?
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  customer        Customer?        @relation("CustomerUser")
+  refreshTokens   RefreshToken[]
+  otpCodes        OtpCode[]
+  auditLogs       AuditLog[]
+  workflowActions WorkflowAction[]
+
+  @@index([email])
+  @@index([role])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  ipAddress String?   @map("ip_address")
+  userAgent String?   @map("user_agent")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model OtpCode {
+  id        String    @id @default(cuid())
+  userId    String?   @map("user_id")
+  email     String?
+  phone     String?
+  code      String
+  purpose   String // registration | login | amendment
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([phone])
+  @@map("otp_codes")
+}
+
+// ════════════════════════════════════════════════════════════
+// CUSTOMERS
+// ════════════════════════════════════════════════════════════
+
+model Customer {
+  id                String            @id @default(cuid())
+  userId            String            @unique @map("user_id")
+  customerCode      String            @unique @map("customer_code") // KUFM-XXXXX
+  companyName       String            @map("company_name")
+  tradeLicenseNo    String?           @map("trade_license_no")
+  vatRegistrationNo String?           @map("vat_registration_no")
+  industry          String?
+  address           Json? // { street, city, emirate, poBox, country }
+  crmExternalId     String?           @map("crm_external_id") // Dynamics 365 ID
+  crmSyncStatus     AdapterSyncStatus @default(PENDING) @map("crm_sync_status")
+  crmSyncedAt       DateTime?         @map("crm_synced_at")
+  isActive          Boolean           @default(true) @map("is_active")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  deletedAt         DateTime?         @map("deleted_at")
+
+  user            User               @relation("CustomerUser", fields: [userId], references: [id])
+  contacts        CustomerContact[]
+  documents       CustomerDocument[]
+  contracts       Contract[]
+  serviceRequests ServiceRequest[]
+
+  @@index([customerCode])
+  @@index([crmExternalId])
+  @@index([deletedAt])
+  @@map("customers")
+}
+
+model CustomerContact {
+  id         String   @id @default(cuid())
+  customerId String   @map("customer_id")
+  name       String
+  role       String? // Primary | Billing | Technical
+  email      String
+  phone      String?
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_contacts")
+}
+
+model CustomerDocument {
+  id           String    @id @default(cuid())
+  customerId   String    @map("customer_id")
+  documentType String    @map("document_type") // trade_license | vat_cert | power_of_attorney
+  fileName     String    @map("file_name")
+  fileUrl      String    @map("file_url")
+  expiresAt    DateTime? @map("expires_at")
+  uploadedAt   DateTime  @default(now()) @map("uploaded_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_documents")
+}
+
+// ════════════════════════════════════════════════════════════
+// CONTRACTS
+// ════════════════════════════════════════════════════════════
+
+model Contract {
+  id               String         @id @default(cuid())
+  contractNumber   String         @unique @map("contract_number") // KZ-GAS-2026-XXXXX
+  customerId       String         @map("customer_id")
+  utilityType      UtilityType    @map("utility_type")
+  status           ContractStatus @default(DRAFT)
+  version          Int            @default(1)
+  startDate        DateTime       @map("start_date")
+  endDate          DateTime?      @map("end_date")
+  siteAddress      String?        @map("site_address")
+  siteCoordinates  Json?          @map("site_coordinates") // { lat, lng }
+  notes            String?
+  regulatoryRef    String?        @map("regulatory_ref") // ATLP reference
+  regulatoryStatus String?        @map("regulatory_status")
+  erpCustomerId    String?        @map("erp_customer_id") // Oracle Fusion ID
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  deletedAt        DateTime?      @map("deleted_at")
+
+  customer               Customer                @relation(fields: [customerId], references: [id])
+  gasDetails             GasContractDetail?
+  powerDetails           PowerContractDetail?
+  waterDetails           WaterContractDetail?
+  coolingDetails         CoolingContractDetail?
+  versions               ContractVersion[]
+  amendments             ContractAmendment[]
+  consumptionProfiles    ConsumptionProfile[]
+  meters                 Meter[]
+  invoices               Invoice[]
+  yearEndReconciliations YearEndReconciliation[]
+  workflowInstances      WorkflowInstance[]
+
+  @@index([customerId])
+  @@index([contractNumber])
+  @@index([utilityType])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("contracts")
+}
+
+model ContractVersion {
+  id            String   @id @default(cuid())
+  contractId    String   @map("contract_id")
+  version       Int
+  snapshotData  Json     @map("snapshot_data") // full contract state at this version
+  changedFields Json?    @map("changed_fields")
+  changedBy     String   @map("changed_by") // userId
+  reason        String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, version])
+  @@index([contractId])
+  @@map("contract_versions")
+}
+
+model ContractAmendment {
+  id             String                @id @default(cuid())
+  contractId     String                @map("contract_id")
+  amendmentType  ContractAmendmentType @map("amendment_type")
+  requestedBy    String                @map("requested_by") // userId
+  requestedAt    DateTime              @default(now()) @map("requested_at")
+  effectiveDate  DateTime              @map("effective_date")
+  noticeDateSent DateTime?             @map("notice_date_sent")
+  changes        Json // { field: { from, to } }
+  reason         String?
+  status         ContractStatus        @default(DRAFT)
+  approvedBy     String?               @map("approved_by")
+  approvedAt     DateTime?             @map("approved_at")
+
+  contract Contract @relation(fields: [contractId], references: [id])
+
+  @@index([contractId])
+  @@map("contract_amendments")
+}
+
+// ─── Gas Contract Details ─────────────────────────────────
+
+model GasContractDetail {
+  id                     String  @id @default(cuid())
+  contractId             String  @unique @map("contract_id")
+  // Quantities
+  dcq                    Decimal @db.Decimal(18, 6) // Daily Contract Quantity (MMBTU/day)
+  acq                    Decimal @db.Decimal(18, 6) // Annual Contract Quantity (MMBTU/year)
+  // Take-or-Pay
+  topThresholdPct        Decimal @default(95.000000) @map("top_threshold_pct") @db.Decimal(10, 6)
+  // Overtake
+  overtakeThresholdPct   Decimal @default(105.000000) @map("overtake_threshold_pct") @db.Decimal(10, 6)
+  // Pricing (per MMBTU)
+  basePrice              Decimal @map("base_price") @db.Decimal(18, 6)
+  serviceCharge          Decimal @map("service_charge") @db.Decimal(18, 6)
+  overtakeSurcharge      Decimal @map("overtake_surcharge") @db.Decimal(18, 6)
+  currency               String  @default("AED")
+  // Nomination constraints
+  monthlyFlexPct         Decimal @default(10.000000) @map("monthly_flex_pct") @db.Decimal(10, 6)
+  monthlyCapPct          Decimal @default(105.000000) @map("monthly_cap_pct") @db.Decimal(10, 6)
+  // Amendment constraints
+  noticeRequiredDays     Int     @default(140) @map("notice_required_days")
+  // Year-end settings
+  washUpEnabled          Boolean @default(true) @map("wash_up_enabled")
+  washDownEnabled        Boolean @default(true) @map("wash_down_enabled")
+  contractYear           Int     @map("contract_year") // 1, 2, 3...
+  maxReductionPctYear1_2 Decimal @default(25.000000) @map("max_reduction_pct_year1_2") @db.Decimal(10, 6)
+  maxReductionPctAfter   Decimal @default(15.000000) @map("max_reduction_pct_after") @db.Decimal(10, 6)
+  // Escalation
+  priceEscalationPct     Decimal @default(0.000000) @map("price_escalation_pct") @db.Decimal(10, 6)
+  escalationFrequency    String? @map("escalation_frequency") // ANNUAL | BIANNUAL
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  nominatedQuantities NominatedQuantity[]
+  topShortfalls       TopShortfall[]
+  overtakeRecords     OvertakeRecord[]
+
+  @@map("gas_contract_details")
+}
+
+model NominatedQuantity {
+  id             String    @id @default(cuid())
+  gasDetailId    String    @map("gas_detail_id")
+  periodYear     Int       @map("period_year")
+  periodMonth    Int       @map("period_month") // 1–12
+  nominatedQty   Decimal   @map("nominated_qty") @db.Decimal(18, 6)
+  originalDcq    Decimal   @map("original_dcq") @db.Decimal(18, 6)
+  changeReason   String?   @map("change_reason")
+  submittedAt    DateTime  @default(now()) @map("submitted_at")
+  submittedBy    String    @map("submitted_by")
+  noticeDateSent DateTime? @map("notice_date_sent")
+  approvedAt     DateTime? @map("approved_at")
+  approvedBy     String?   @map("approved_by")
+
+  gasDetail GasContractDetail @relation(fields: [gasDetailId], references: [id], onDelete: Cascade)
+
+  @@unique([gasDetailId, periodYear, periodMonth])
+  @@map("nominated_quantities")
+}
+
+model TopShortfall {
+  id           String    @id @default(cuid())
+  gasDetailId  String    @map("gas_detail_id")
+  periodYear   Int       @map("period_year")
+  actualQty    Decimal   @map("actual_qty") @db.Decimal(18, 6)
+  acqQty       Decimal   @map("acq_qty") @db.Decimal(18, 6)
+  shortfallQty Decimal   @map("shortfall_qty") @db.Decimal(18, 6)
+  shortfallAmt Decimal   @map("shortfall_amt") @db.Decimal(18, 6)
+  paidAt       DateTime? @map("paid_at")
+  invoiceId    String?   @map("invoice_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  gasDetail GasContractDetail @relation(fields: [gasDetailId], references: [id])
+
+  @@index([gasDetailId])
+  @@map("top_shortfalls")
+}
+
+model OvertakeRecord {
+  id           String   @id @default(cuid())
+  gasDetailId  String   @map("gas_detail_id")
+  periodDate   DateTime @map("period_date")
+  dcqQty       Decimal  @map("dcq_qty") @db.Decimal(18, 6)
+  actualQty    Decimal  @map("actual_qty") @db.Decimal(18, 6)
+  overtakeQty  Decimal  @map("overtake_qty") @db.Decimal(18, 6)
+  surchargeAmt Decimal  @map("surcharge_amt") @db.Decimal(18, 6)
+  invoiceId    String?  @map("invoice_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  gasDetail GasContractDetail @relation(fields: [gasDetailId], references: [id])
+
+  @@index([gasDetailId])
+  @@map("overtake_records")
+}
+
+model YearEndReconciliation {
+  id              String    @id @default(cuid())
+  contractId      String    @map("contract_id")
+  periodYear      Int       @map("period_year")
+  acqQty          Decimal   @map("acq_qty") @db.Decimal(18, 6)
+  actualQty       Decimal   @map("actual_qty") @db.Decimal(18, 6)
+  topThresholdQty Decimal   @map("top_threshold_qty") @db.Decimal(18, 6)
+  shortfallQty    Decimal   @map("shortfall_qty") @db.Decimal(18, 6)
+  washUpAmt       Decimal   @default(0) @map("wash_up_amt") @db.Decimal(18, 6)
+  washDownAmt     Decimal   @default(0) @map("wash_down_amt") @db.Decimal(18, 6)
+  netPayableAmt   Decimal   @map("net_payable_amt") @db.Decimal(18, 6)
+  status          String    @default("DRAFT") // DRAFT | APPROVED | INVOICED
+  invoiceId       String?   @map("invoice_id")
+  calculatedAt    DateTime  @default(now()) @map("calculated_at")
+  approvedBy      String?   @map("approved_by")
+  approvedAt      DateTime? @map("approved_at")
+
+  contract Contract @relation(fields: [contractId], references: [id])
+
+  @@unique([contractId, periodYear])
+  @@map("year_end_reconciliations")
+}
+
+// ─── Power Contract Details ───────────────────────────────
+
+model PowerContractDetail {
+  id             String  @id @default(cuid())
+  contractId     String  @unique @map("contract_id")
+  contractedKw   Decimal @map("contracted_kw") @db.Decimal(18, 6)
+  currency       String  @default("AED")
+  touEnabled     Boolean @default(true) @map("tou_enabled")
+  peakHoursStart String? @map("peak_hours_start") // "06:00"
+  peakHoursEnd   String? @map("peak_hours_end") // "22:00"
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@map("power_contract_details")
+}
+
+// ─── Water Contract Details ───────────────────────────────
+
+model WaterContractDetail {
+  id           String  @id @default(cuid())
+  contractId   String  @unique @map("contract_id")
+  contractedM3 Decimal @map("contracted_m3") @db.Decimal(18, 6)
+  currency     String  @default("AED")
+  tieredRates  Boolean @default(true) @map("tiered_rates")
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@map("water_contract_details")
+}
+
+// ─── District Cooling Contract Details ────────────────────
+
+model CoolingContractDetail {
+  id                     String  @id @default(cuid())
+  contractId             String  @unique @map("contract_id")
+  contractedRt           Decimal @map("contracted_rt") @db.Decimal(18, 6) // Refrigeration Tons
+  contractedTonHours     Decimal @map("contracted_ton_hours") @db.Decimal(18, 6)
+  capacityChargePerRt    Decimal @map("capacity_charge_per_rt") @db.Decimal(18, 6)
+  consumptionChargePerTh Decimal @map("consumption_charge_per_th") @db.Decimal(18, 6)
+  currency               String  @default("AED")
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@map("cooling_contract_details")
+}
+
+// ════════════════════════════════════════════════════════════
+// CONSUMPTION PROFILES
+// ════════════════════════════════════════════════════════════
+
+model ConsumptionProfile {
+  id               String    @id @default(cuid())
+  contractId       String    @map("contract_id")
+  periodYear       Int       @map("period_year")
+  version          Int       @default(1)
+  monthlyForecasts Json      @map("monthly_forecasts") // { month: qty }
+  submittedBy      String    @map("submitted_by")
+  submittedAt      DateTime  @default(now()) @map("submitted_at")
+  approvedBy       String?   @map("approved_by")
+  approvedAt       DateTime? @map("approved_at")
+  status           String    @default("DRAFT") // DRAFT | SUBMITTED | APPROVED | REJECTED
+  notes            String?
+
+  contract Contract @relation(fields: [contractId], references: [id])
+
+  @@index([contractId])
+  @@map("consumption_profiles")
+}
+
+// ════════════════════════════════════════════════════════════
+// METERS & CONSUMPTION DATA
+// ════════════════════════════════════════════════════════════
+
+model Meter {
+  id              String    @id @default(cuid())
+  meterCode       String    @unique @map("meter_code")
+  contractId      String    @map("contract_id")
+  meterType       MeterType @map("meter_type")
+  serialNumber    String?   @map("serial_number")
+  manufacturer    String?
+  model           String?
+  installDate     DateTime? @map("install_date")
+  location        String?
+  isSubMeter      Boolean   @default(false) @map("is_sub_meter")
+  parentMeterId   String?   @map("parent_meter_id")
+  // SCADA/BMS integration
+  scadaNodeId     String?   @map("scada_node_id") // OPC UA NodeId
+  modbusRegister  Int?      @map("modbus_register") // Modbus register address
+  dataSource      String?   @map("data_source") // scada | bms | manual
+  pollingInterval Int?      @default(900) @map("polling_interval") // seconds
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  contract       Contract         @relation(fields: [contractId], references: [id])
+  parentMeter    Meter?           @relation("SubMeters", fields: [parentMeterId], references: [id])
+  subMeters      Meter[]          @relation("SubMeters")
+  dataPoints     MeterDataPoint[]
+  manualReadings MeterReading[]
+
+  @@index([contractId])
+  @@index([meterCode])
+  @@map("meters")
+}
+
+model MeterDataPoint {
+  id             String          @id @default(cuid())
+  meterId        String          @map("meter_id")
+  periodStartUtc DateTime        @map("period_start_utc")
+  periodEndUtc   DateTime        @map("period_end_utc")
+  rawValue       Decimal         @map("raw_value") @db.Decimal(18, 6)
+  unit           String          @default("MMBTU") // MMBTU | KWH | M3 | TON_HOUR | RT
+  qualityFlag    DataQualityFlag @default(GOOD) @map("quality_flag")
+  isInterpolated Boolean         @default(false) @map("is_interpolated")
+  isManual       Boolean         @default(false) @map("is_manual")
+  checksum       String?
+  sourceSystem   String?         @map("source_system") // scada_siemens | bms_tridium | manual
+  receivedAt     DateTime        @default(now()) @map("received_at")
+
+  meter Meter @relation(fields: [meterId], references: [id], onDelete: Cascade)
+
+  @@unique([meterId, periodEndUtc, checksum])
+  @@index([meterId])
+  @@index([periodEndUtc])
+  @@index([qualityFlag])
+  @@map("meter_data_points")
+}
+
+model MeterReading {
+  id          String    @id @default(cuid())
+  meterId     String    @map("meter_id")
+  readingDate DateTime  @map("reading_date")
+  reading     Decimal   @db.Decimal(18, 6)
+  unit        String
+  readBy      String    @map("read_by") // userId
+  notes       String?
+  isApproved  Boolean   @default(false) @map("is_approved")
+  approvedBy  String?   @map("approved_by")
+  approvedAt  DateTime? @map("approved_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  meter Meter @relation(fields: [meterId], references: [id])
+
+  @@index([meterId])
+  @@map("meter_readings")
+}
+
+// ════════════════════════════════════════════════════════════
+// TARIFFS & BILLING
+// ════════════════════════════════════════════════════════════
+
+model Tariff {
+  id            String      @id @default(cuid())
+  utilityType   UtilityType @map("utility_type")
+  tariffType    TariffType  @map("tariff_type")
+  name          String
+  description   String?
+  currency      String      @default("AED")
+  effectiveFrom DateTime    @map("effective_from")
+  effectiveTo   DateTime?   @map("effective_to")
+  version       Int         @default(1)
+  isActive      Boolean     @default(true) @map("is_active")
+  createdBy     String      @map("created_by")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  deletedAt     DateTime?   @map("deleted_at")
+
+  rates            TariffRate[]
+  tiers            TariffTier[]
+  touPeriods       TouPeriod[]
+  invoiceLineItems InvoiceLineItem[]
+
+  @@index([utilityType])
+  @@index([effectiveFrom, effectiveTo])
+  @@index([deletedAt])
+  @@map("tariffs")
+}
+
+model TariffRate {
+  id       String  @id @default(cuid())
+  tariffId String  @map("tariff_id")
+  rateKey  String  @map("rate_key") // base | service | overtake | capacity | consumption
+  rate     Decimal @db.Decimal(18, 6)
+  unit     String // per_mmbtu | per_kwh | per_m3 | per_rt | per_ton_hour
+  notes    String?
+
+  tariff Tariff @relation(fields: [tariffId], references: [id], onDelete: Cascade)
+
+  @@unique([tariffId, rateKey])
+  @@map("tariff_rates")
+}
+
+model TariffTier {
+  id         String   @id @default(cuid())
+  tariffId   String   @map("tariff_id")
+  tierNumber Int      @map("tier_number")
+  fromQty    Decimal  @map("from_qty") @db.Decimal(18, 6)
+  toQty      Decimal? @map("to_qty") @db.Decimal(18, 6) // null = unlimited
+  rate       Decimal  @db.Decimal(18, 6)
+  unit       String
+
+  tariff Tariff @relation(fields: [tariffId], references: [id], onDelete: Cascade)
+
+  @@unique([tariffId, tierNumber])
+  @@map("tariff_tiers")
+}
+
+model TouPeriod {
+  id         String  @id @default(cuid())
+  tariffId   String  @map("tariff_id")
+  periodName String  @map("period_name") // peak | off_peak | shoulder
+  startTime  String  @map("start_time") // "06:00"
+  endTime    String  @map("end_time") // "22:00"
+  daysOfWeek Int[]   @map("days_of_week") // 1=Mon..7=Sun
+  rate       Decimal @db.Decimal(18, 6)
+  unit       String
+
+  tariff Tariff @relation(fields: [tariffId], references: [id], onDelete: Cascade)
+
+  @@map("tou_periods")
+}
+
+// ─── Billing Runs & Invoices ──────────────────────────────
+
+model BillingRun {
+  id            String        @id @default(cuid())
+  runCode       String        @unique @map("run_code") // BR-2026-03-001
+  periodFrom    DateTime      @map("period_from")
+  periodTo      DateTime      @map("period_to")
+  utilityTypes  UtilityType[] @map("utility_types")
+  status        String        @default("PENDING") // PENDING | RUNNING | COMPLETED | FAILED | PARTIAL
+  totalInvoices Int           @default(0) @map("total_invoices")
+  failedCount   Int           @default(0) @map("failed_count")
+  totalAmount   Decimal       @default(0) @map("total_amount") @db.Decimal(18, 6)
+  startedAt     DateTime?     @map("started_at")
+  completedAt   DateTime?     @map("completed_at")
+  triggeredBy   String        @map("triggered_by")
+  errorLog      Json?         @map("error_log")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  invoices Invoice[]
+
+  @@map("billing_runs")
+}
+
+model Invoice {
+  id                String        @id @default(cuid())
+  invoiceNumber     String        @unique @map("invoice_number") // INV-GAS-2026-000001
+  contractId        String        @map("contract_id")
+  billingRunId      String?       @map("billing_run_id")
+  utilityType       UtilityType   @map("utility_type")
+  status            InvoiceStatus @default(DRAFT)
+  periodFrom        DateTime      @map("period_from")
+  periodTo          DateTime      @map("period_to")
+  issueDate         DateTime?     @map("issue_date")
+  dueDate           DateTime?     @map("due_date")
+  // Amounts (stored as strings in code via decimal.js, Decimal in DB)
+  subtotal          Decimal       @db.Decimal(18, 6)
+  vatPct            Decimal       @default(5.000000) @map("vat_pct") @db.Decimal(8, 6)
+  vatAmount         Decimal       @map("vat_amount") @db.Decimal(18, 6)
+  totalAmount       Decimal       @map("total_amount") @db.Decimal(18, 6)
+  paidAmount        Decimal       @default(0) @map("paid_amount") @db.Decimal(18, 6)
+  outstandingAmount Decimal       @map("outstanding_amount") @db.Decimal(18, 6)
+  currency          String        @default("AED")
+  isProrated        Boolean       @default(false) @map("is_prorated")
+  isRerating        Boolean       @default(false) @map("is_rerating")
+  pdfUrl            String?       @map("pdf_url")
+  erpInvoiceId      String?       @map("erp_invoice_id") // Oracle Fusion AR ID
+  notes             String?
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+  deletedAt         DateTime?     @map("deleted_at")
+
+  contract    Contract            @relation(fields: [contractId], references: [id])
+  billingRun  BillingRun?         @relation(fields: [billingRunId], references: [id])
+  lineItems   InvoiceLineItem[]
+  payments    Payment[]
+  adjustments BillingAdjustment[]
+  creditNotes CreditNote[]
+  disputes    BillingDispute[]
+
+  @@index([contractId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([deletedAt])
+  @@map("invoices")
+}
+
+model InvoiceLineItem {
+  id          String    @id @default(cuid())
+  invoiceId   String    @map("invoice_id")
+  tariffId    String?   @map("tariff_id")
+  description String
+  lineType    String    @map("line_type") // consumption | capacity | overtake | top_shortfall | service
+  quantity    Decimal   @db.Decimal(18, 6)
+  unit        String
+  rate        Decimal   @db.Decimal(18, 6)
+  amount      Decimal   @db.Decimal(18, 6)
+  periodFrom  DateTime? @map("period_from")
+  periodTo    DateTime? @map("period_to")
+  metadata    Json? // additional calc details
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  tariff  Tariff? @relation(fields: [tariffId], references: [id])
+
+  @@index([invoiceId])
+  @@map("invoice_line_items")
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  invoiceId       String        @map("invoice_id")
+  paymentRef      String        @unique @map("payment_ref")
+  amount          Decimal       @db.Decimal(18, 6)
+  currency        String        @default("AED")
+  method          String // bank_transfer | online | cheque
+  status          PaymentStatus @default(PENDING)
+  gatewayRef      String?       @map("gateway_ref")
+  gatewayResponse Json?         @map("gateway_response")
+  paidAt          DateTime?     @map("paid_at")
+  allocatedAt     DateTime?     @map("allocated_at")
+  isUnapplied     Boolean       @default(false) @map("is_unapplied")
+  erpPaymentId    String?       @map("erp_payment_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@index([status])
+  @@map("payments")
+}
+
+model BillingAdjustment {
+  id          String    @id @default(cuid())
+  invoiceId   String    @map("invoice_id")
+  adjustedBy  String    @map("adjusted_by")
+  adjustedAt  DateTime  @default(now()) @map("adjusted_at")
+  description String
+  amount      Decimal   @db.Decimal(18, 6) // +ve = charge, -ve = credit
+  reason      String
+  approvedBy  String?   @map("approved_by")
+  approvedAt  DateTime? @map("approved_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@map("billing_adjustments")
+}
+
+model CreditNote {
+  id           String    @id @default(cuid())
+  creditNoteNo String    @unique @map("credit_note_no")
+  invoiceId    String    @map("invoice_id")
+  amount       Decimal   @db.Decimal(18, 6)
+  reason       String
+  issuedBy     String    @map("issued_by")
+  issuedAt     DateTime  @default(now()) @map("issued_at")
+  appliedAt    DateTime? @map("applied_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("credit_notes")
+}
+
+// ════════════════════════════════════════════════════════════
+// WORKFLOW ENGINE
+// ════════════════════════════════════════════════════════════
+
+model WorkflowDefinition {
+  id           String       @id @default(cuid())
+  workflowType WorkflowType @unique @map("workflow_type")
+  name         String
+  description  String?
+  maxLevels    Int          @default(5) @map("max_levels")
+  isActive     Boolean      @default(true) @map("is_active")
+  config       Json // step definitions, role requirements per level
+
+  instances WorkflowInstance[]
+  steps     WorkflowStep[]
+
+  @@map("workflow_definitions")
+}
+
+model WorkflowStep {
+  id                   String   @id @default(cuid())
+  workflowDefinitionId String   @map("workflow_definition_id")
+  stepNumber           Int      @map("step_number")
+  stepName             String   @map("step_name")
+  requiredRole         UserRole @map("required_role")
+  isFinalStep          Boolean  @default(false) @map("is_final_step")
+  timeoutHours         Int?     @map("timeout_hours")
+  notifyOnAssign       Boolean  @default(true) @map("notify_on_assign")
+
+  definition WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id])
+
+  @@unique([workflowDefinitionId, stepNumber])
+  @@map("workflow_steps")
+}
+
+model WorkflowInstance {
+  id                   String         @id @default(cuid())
+  workflowType         WorkflowType   @map("workflow_type")
+  workflowDefinitionId String         @map("workflow_definition_id")
+  contractId           String?        @map("contract_id")
+  entityType           String         @map("entity_type") // contract | invoice | tariff | service_request
+  entityId             String         @map("entity_id")
+  currentStep          Int            @default(1) @map("current_step")
+  status               WorkflowStatus @default(PENDING)
+  submittedBy          String         @map("submitted_by")
+  submittedAt          DateTime       @default(now()) @map("submitted_at")
+  completedAt          DateTime?      @map("completed_at")
+  notes                String?
+  metadata             Json?
+
+  definition WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id])
+  contract   Contract?          @relation(fields: [contractId], references: [id])
+  actions    WorkflowAction[]
+
+  @@index([entityType, entityId])
+  @@index([status])
+  @@map("workflow_instances")
+}
+
+model WorkflowAction {
+  id                 String             @id @default(cuid())
+  workflowInstanceId String             @map("workflow_instance_id")
+  stepNumber         Int                @map("step_number")
+  actionType         WorkflowActionType @map("action_type")
+  actedBy            String             @map("acted_by")
+  actedAt            DateTime           @default(now()) @map("acted_at")
+  comments           String?
+  previousStatus     WorkflowStatus     @map("previous_status")
+  newStatus          WorkflowStatus     @map("new_status")
+
+  instance WorkflowInstance @relation(fields: [workflowInstanceId], references: [id])
+  actor    User             @relation(fields: [actedBy], references: [id])
+
+  @@index([workflowInstanceId])
+  @@map("workflow_actions")
+}
+
+// ════════════════════════════════════════════════════════════
+// SERVICE REQUESTS & DISPUTES
+// ════════════════════════════════════════════════════════════
+
+model ServiceRequest {
+  id             String               @id @default(cuid())
+  requestNumber  String               @unique @map("request_number")
+  customerId     String               @map("customer_id")
+  requestType    ServiceRequestType   @map("request_type")
+  status         ServiceRequestStatus @default(OPEN)
+  subject        String
+  description    String
+  attachments    Json? // [{ fileName, fileUrl }]
+  assignedTo     String?              @map("assigned_to")
+  resolvedAt     DateTime?            @map("resolved_at")
+  resolutionNote String?              @map("resolution_note")
+  slaDeadline    DateTime?            @map("sla_deadline")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@index([status])
+  @@map("service_requests")
+}
+
+model BillingDispute {
+  id             String    @id @default(cuid())
+  disputeNumber  String    @unique @map("dispute_number")
+  invoiceId      String    @map("invoice_id")
+  raisedBy       String    @map("raised_by") // userId
+  raisedAt       DateTime  @default(now()) @map("raised_at")
+  reason         String
+  description    String
+  disputedAmount Decimal   @map("disputed_amount") @db.Decimal(18, 6)
+  status         String    @default("OPEN") // OPEN | UNDER_REVIEW | RESOLVED | REJECTED
+  resolvedBy     String?   @map("resolved_by")
+  resolvedAt     DateTime? @map("resolved_at")
+  resolution     String?
+  creditNoteId   String?   @map("credit_note_id")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@map("billing_disputes")
+}
+
+// ════════════════════════════════════════════════════════════
+// NOTIFICATIONS & AUDIT
+// ════════════════════════════════════════════════════════════
+
+model Notification {
+  id            String              @id @default(cuid())
+  userId        String              @map("user_id")
+  type          NotificationType
+  channel       NotificationChannel
+  title         String
+  body          String
+  metadata      Json?
+  isRead        Boolean             @default(false) @map("is_read")
+  sentAt        DateTime?           @map("sent_at")
+  deliveredAt   DateTime?           @map("delivered_at")
+  failureReason String?             @map("failure_reason")
+  createdAt     DateTime            @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  userId      String?     @map("user_id")
+  action      AuditAction
+  entityType  String      @map("entity_type")
+  entityId    String      @map("entity_id")
+  description String?
+  oldValues   Json?       @map("old_values")
+  newValues   Json?       @map("new_values")
+  ipAddress   String?     @map("ip_address")
+  userAgent   String?     @map("user_agent")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ════════════════════════════════════════════════════════════
+// MOCK ADAPTER DATA
+// ════════════════════════════════════════════════════════════
+
+model MockScadaDatapoint {
+  id         String   @id @default(cuid())
+  nodeId     String   @map("node_id")
+  systemName String   @map("system_name") // siemens_wincc | emerson_oe
+  value      Decimal  @db.Decimal(18, 6)
+  unit       String
+  quality    String   @default("Good")
+  timestamp  DateTime
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([nodeId])
+  @@index([timestamp])
+  @@map("mock_scada_datapoints")
+}
+
+model MockBmsDatapoint {
+  id         String   @id @default(cuid())
+  register   Int
+  systemName String   @map("system_name") // tridium | honeywell
+  value      Decimal  @db.Decimal(18, 6)
+  unit       String
+  timestamp  DateTime
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([register])
+  @@index([timestamp])
+  @@map("mock_bms_datapoints")
+}
+
+// ════════════════════════════════════════════════════════════
+// REPORT SNAPSHOTS
+// ════════════════════════════════════════════════════════════
+
+model ReportSnapshot {
+  id          String    @id @default(cuid())
+  reportType  String    @map("report_type")
+  parameters  Json
+  generatedBy String    @map("generated_by")
+  generatedAt DateTime  @default(now()) @map("generated_at")
+  data        Json
+  exportUrl   String?   @map("export_url")
+  expiresAt   DateTime? @map("expires_at")
+
+  @@index([reportType])
+  @@index([generatedBy])
+  @@map("report_snapshots")
+}
