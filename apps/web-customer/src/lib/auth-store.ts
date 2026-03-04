@@ -57,10 +57,14 @@ export const useAuthStore = create<AuthState>()(
  * Returns true once the store has finished rehydrating from localStorage.
  */
 export function useAuthHydrated(): boolean {
-  const [hydrated, setHydrated] = useState(useAuthStore.persist.hasHydrated());
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    const unsub = useAuthStore.persist.onFinishHydration(() => setHydrated(true));
-    return () => unsub();
+    if (useAuthStore.persist?.hasHydrated()) {
+      setHydrated(true);
+    } else {
+      const unsub = useAuthStore.persist?.onFinishHydration?.(() => setHydrated(true));
+      return () => unsub?.();
+    }
   }, []);
   return hydrated;
 }

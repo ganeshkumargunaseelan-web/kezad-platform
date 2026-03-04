@@ -71,7 +71,7 @@ export default async function serviceRequestsRoutes(fastify: FastifyInstance): P
       data: {
         requestNumber,
         customerId: req.user.customerId ?? '',
-        requestType: body.requestType as 'ACTIVATION' | 'DEACTIVATION' | 'TECHNICAL_ISSUE' | 'METER_VERIFICATION' | 'BILLING_DISPUTE' | 'OTHER',
+        requestType: body.requestType as any,
         subject: body.subject,
         description: body.description,
         slaDeadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),

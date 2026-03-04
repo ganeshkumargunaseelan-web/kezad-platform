@@ -1,0 +1,29 @@
+databases:
+  - name: kezad-db
+    plan: free
+    databaseName: kezad
+    user: kezad
+
+services:
+  - type: web
+    name: kezad-api
+    plan: free
+    runtime: node
+    rootDir: .
+    buildCommand: npm install && npx turbo build --filter=@kezad/api && cd packages/database && npx prisma generate
+    startCommand: cd apps/api && npx prisma db push --skip-generate && npx prisma db seed && node dist/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: JWT_SECRET
+        value: kezad-super-secret-jwt-key-2026
+      - key: JWT_REFRESH_SECRET
+        value: kezad-refresh-secret-2026
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kezad-db
+          property: connectionString
+      - key: REDIS_URL
+        value: ""

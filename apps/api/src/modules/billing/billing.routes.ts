@@ -92,7 +92,7 @@ export default async function billingRoutes(fastify: FastifyInstance): Promise<v
   }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const invoice = await service.getInvoice(id);
-    const amt = (v: string | number) => `AED ${Number(v).toLocaleString('en-AE', { minimumFractionDigits: 2 })}`;
+    const amt = (v: unknown) => `AED ${Number(v).toLocaleString('en-AE', { minimumFractionDigits: 2 })}`;
     const fmtDate = (d: unknown) => d ? new Date(d as string).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ${invoice.invoiceNumber}</title>
