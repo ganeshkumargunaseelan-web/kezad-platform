@@ -8,4 +8,4 @@ npx prisma db seed --schema=prisma/schema.prisma || echo "Seed failed, continuin
 
 echo "=== Starting API server ==="
 cd /app/apps/api
-exec node dist/server.js
+exec node --import=tsx/esm dist/server.js
