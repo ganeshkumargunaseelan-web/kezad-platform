@@ -19,6 +19,19 @@ declare module 'fastify' {
 }
 
 async function redisPlugin(fastify: FastifyInstance): Promise<void> {
+  if (!env.REDIS_URL) {
+    fastify.log.info('⚠️  Redis URL not set — caching disabled (in-memory noop)');
+    const noopCache = {
+      async get<T>(): Promise<T | null> { return null; },
+      async set<T>(): Promise<void> {},
+      async del(): Promise<void> {},
+      async invalidatePattern(): Promise<void> {},
+    };
+    fastify.decorate('redis', null as any);
+    fastify.decorate('cache', noopCache);
+    return;
+  }
+
   const redis = new Redis(env.REDIS_URL, {
     maxRetriesPerRequest: 3,
     retryStrategy: (times) => Math.min(times * 100, 3000),

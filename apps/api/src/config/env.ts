@@ -11,7 +11,7 @@ const EnvSchema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
 
   DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().default('redis://localhost:6379'),
+  REDIS_URL: z.string().default(''),
 
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
