@@ -38,7 +38,10 @@ export function StatCard({
         {/* Value + labels */}
         <div className="flex-1 min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">{title}</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 leading-none tracking-tight">
+          <p className={cn(
+            'mt-2 font-bold text-gray-900 leading-none tracking-tight truncate',
+            String(value).length > 12 ? 'text-xl' : 'text-3xl',
+          )}>
             {value}
           </p>
           {subtitle && (
