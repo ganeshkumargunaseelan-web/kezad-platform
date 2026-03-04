@@ -35,10 +35,11 @@ function getContractSummary(c: Contract): string {
 }
 
 export default function ContractsPage() {
-  const { data: contracts, isLoading } = useQuery<{ data: Contract[] }>({
+  const { data: rawContracts, isLoading } = useQuery({
     queryKey: ['contracts'],
-    queryFn: () => api.get('/contracts').then((r) => r.data),
+    queryFn: () => api.get('/contracts').then((r) => r.data.data),
   });
+  const contracts = Array.isArray(rawContracts) ? (rawContracts as Contract[]) : [];
 
   return (
     <div className="animate-fade-in">
@@ -51,7 +52,7 @@ export default function ContractsPage() {
               <div key={i} className="h-36 rounded-xl bg-gray-100 animate-pulse" />
             ))}
           </div>
-        ) : !contracts?.data?.length ? (
+        ) : !contracts.length ? (
           <div className="text-center py-16">
             <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500 font-medium">No contracts found</p>
@@ -59,7 +60,7 @@ export default function ContractsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {contracts.data.map((contract) => {
+            {contracts.map((contract) => {
               const meta = UTILITY_META[contract.utilityType] ?? UTILITY_META['POWER']!;
               return (
                 <a key={contract.id} href={`/contracts/${contract.id}`}>

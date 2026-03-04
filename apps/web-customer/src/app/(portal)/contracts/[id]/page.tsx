@@ -45,6 +45,11 @@ interface MeterDataPoint {
   periodStartUtc: string; periodEndUtc: string; rawValue: string; unit: string;
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Draft', SENT: 'Pending Payment', PAID: 'Paid', OVERDUE: 'Overdue',
+  PARTIALLY_PAID: 'Partially Paid', DISPUTED: 'Under Dispute', CANCELLED: 'Cancelled',
+};
+
 const UTILITY_META: Record<string, { icon: React.ReactNode; color: string; bg: string; label: string }> = {
   GAS:              { icon: <Wind className="h-6 w-6" />,      color: 'text-orange-700', bg: 'bg-orange-100', label: 'Industrial Gas' },
   POWER:            { icon: <Zap className="h-6 w-6" />,       color: 'text-blue-700',   bg: 'bg-blue-100',   label: 'Power' },
@@ -271,7 +276,7 @@ export default function ContractDetailPage() {
                         <TableCell className={`text-sm font-medium ${parseFloat(inv.outstandingAmount) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                           {formatCurrency(Number(inv.outstandingAmount), inv.currency)}
                         </TableCell>
-                        <TableCell><Badge variant={statusVariant(inv.status)}>{inv.status}</Badge></TableCell>
+                        <TableCell><Badge variant={statusVariant(inv.status)}>{STATUS_LABELS[inv.status] ?? inv.status}</Badge></TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Button variant="ghost" size="sm" onClick={() => window.open(`/api/billing/invoices/${inv.id}/pdf`)}>

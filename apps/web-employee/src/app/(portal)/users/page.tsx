@@ -71,7 +71,7 @@ export default function UsersPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="bg-white border-b px-8 py-5 flex items-center justify-between">
+      <div className="kezad-page-header">
         <div>
           <h1 className="text-xl font-bold text-gray-900">User Management</h1>
           <p className="text-sm text-gray-500">Manage employee portal users and access roles</p>

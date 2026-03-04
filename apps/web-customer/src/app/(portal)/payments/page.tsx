@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { CreditCard, Receipt, CheckCircle2, Clock, AlertTriangle, ArrowUpRight } from 'lucide-react';
 import {
@@ -23,13 +24,22 @@ interface Invoice {
   currency: string;
 }
 
-export default function PaymentsPage() {
-  const { data, isLoading } = useQuery<{ data: Invoice[] }>({
-    queryKey: ['payment-invoices'],
-    queryFn: () => api.get('/billing/invoices?limit=50').then((r) => r.data),
-  });
+const STATUS_LABELS: Record<string, string> = {
+  SENT: 'Pending Payment', OVERDUE: 'Overdue', PARTIALLY_PAID: 'Partially Paid',
+  PAID: 'Paid', DISPUTED: 'Under Dispute',
+};
 
-  const invoices = data?.data ?? [];
+const UTILITY_LABELS: Record<string, string> = {
+  GAS: 'Gas', POWER: 'Power', WATER: 'Water', DISTRICT_COOLING: 'District Cooling',
+};
+
+export default function PaymentsPage() {
+  const router = useRouter();
+  const { data: rawInvoices, isLoading } = useQuery({
+    queryKey: ['payment-invoices'],
+    queryFn: () => api.get('/billing/invoices?limit=50').then((r) => r.data.data),
+  });
+  const invoices = Array.isArray(rawInvoices) ? (rawInvoices as Invoice[]) : [];
   const outstanding = invoices.filter((i) => ['SENT', 'OVERDUE', 'PARTIALLY_PAID'].includes(i.status));
   const paid = invoices.filter((i) => i.status === 'PAID');
   const totalOutstanding = outstanding.reduce((s, i) => s + parseFloat(i.outstandingAmount), 0);
@@ -73,13 +83,13 @@ export default function PaymentsPage() {
                   {outstanding.map((inv) => (
                     <TableRow key={inv.id} className={inv.status === 'OVERDUE' ? 'bg-red-50/30' : ''}>
                       <TableCell className="font-mono text-xs font-semibold">{inv.invoiceNumber}</TableCell>
-                      <TableCell className="text-sm">{inv.utilityType.replace('_', ' ')}</TableCell>
+                      <TableCell className="text-sm">{UTILITY_LABELS[inv.utilityType] ?? inv.utilityType}</TableCell>
                       <TableCell className="font-medium">{formatCurrency(Number(inv.totalAmount), inv.currency)}</TableCell>
                       <TableCell className="font-semibold text-red-600">{formatCurrency(Number(inv.outstandingAmount), inv.currency)}</TableCell>
                       <TableCell className={`text-xs ${inv.status === 'OVERDUE' ? 'text-red-500 font-medium' : 'text-gray-400'}`}>{formatDate(inv.dueDate)}</TableCell>
-                      <TableCell><Badge variant={statusVariant(inv.status)}>{inv.status}</Badge></TableCell>
+                      <TableCell><Badge variant={statusVariant(inv.status)}>{STATUS_LABELS[inv.status] ?? inv.status}</Badge></TableCell>
                       <TableCell>
-                        <Button size="sm" variant="outline">
+                        <Button size="sm" variant="outline" onClick={() => router.push(`/payments/pay/${inv.id}`)}>
                           <CreditCard className="h-3.5 w-3.5 mr-1" /> Pay Now
                         </Button>
                       </TableCell>
@@ -122,10 +132,10 @@ export default function PaymentsPage() {
                   {paid.map((inv) => (
                     <TableRow key={inv.id}>
                       <TableCell className="font-mono text-xs font-semibold">{inv.invoiceNumber}</TableCell>
-                      <TableCell className="text-sm">{inv.utilityType.replace('_', ' ')}</TableCell>
+                      <TableCell className="text-sm">{UTILITY_LABELS[inv.utilityType] ?? inv.utilityType}</TableCell>
                       <TableCell className="font-medium text-green-600">{formatCurrency(Number(inv.paidAmount), inv.currency)}</TableCell>
                       <TableCell className="text-xs text-gray-400">{formatDate(inv.issueDate)}</TableCell>
-                      <TableCell><Badge variant={statusVariant(inv.status)}>{inv.status}</Badge></TableCell>
+                      <TableCell><Badge variant={statusVariant(inv.status)}>{STATUS_LABELS[inv.status] ?? inv.status}</Badge></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

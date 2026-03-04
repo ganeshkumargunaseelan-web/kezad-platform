@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Shield } from 'lucide-react';
+/* Shield icon removed — using logo image */
 import { Button, Input } from '@kezad/ui';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
@@ -65,9 +65,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, hsl(222 47% 11%) 0%, hsl(220 70% 20%) 100%)' }}>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-sm mb-4">
-            <Shield className="h-8 w-8 text-white" />
-          </div>
+          <img src="/kezad-logo.png" alt="KEZAD Group" className="h-16 w-auto mx-auto mb-4 brightness-0 invert" />
           <h1 className="text-2xl font-bold text-white">KEZAD Operations</h1>
           <p className="text-sm text-white/60 mt-1">Employee Portal — Authorised Access Only</p>
         </div>

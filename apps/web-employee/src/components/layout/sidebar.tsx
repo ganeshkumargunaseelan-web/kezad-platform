@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, FileText, BarChart3, Receipt, GitBranch,
-  Settings, Shield, Database, TrendingUp, Zap, LogOut, Activity,
+  Settings, Shield, Database, TrendingUp, LogOut, Activity,
   Bell, ClipboardList, Gauge,
 } from 'lucide-react';
 import { cn } from '@kezad/ui';
@@ -73,17 +73,11 @@ export function Sidebar() {
   return (
     <aside className="kezad-sidebar w-64 min-h-screen flex flex-col">
       {/* Logo */}
-      <div className="p-5 border-b border-white/[0.08]">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-teal-900/50"
-            style={{ background: 'linear-gradient(135deg, #00AFAF, #006B6B)' }}>
-            <Zap className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <p className="font-bold text-sm text-white tracking-wide">KEZAD Ops</p>
-            <p className="text-xs" style={{ color: '#33CFCF' }}>Employee Portal</p>
-          </div>
+      <div className="px-5 py-5 border-b border-white/[0.08] flex flex-col">
+        <div className="bg-white rounded-lg px-3 py-2 w-fit">
+          <img src="/kezad-logo.png" alt="KEZAD Group" className="h-6 w-auto block" />
         </div>
+        <p className="text-[10px] font-semibold uppercase tracking-widest mt-2" style={{ color: '#33CFCF' }}>Employee Portal</p>
       </div>
 
       {/* Navigation */}

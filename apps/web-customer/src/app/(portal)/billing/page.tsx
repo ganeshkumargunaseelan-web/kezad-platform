@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Download, Search, Filter } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { FileText, Search, Filter, AlertCircle } from 'lucide-react';
 import {
-  Card, CardContent, CardHeader, CardTitle, Badge, statusVariant,
+  Card, CardContent, CardHeader, CardTitle, Badge,
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
-  Button, Input, formatCurrency, formatDate,
+  Button, formatCurrency, formatDate, Modal, ModalFooter,
 } from '@kezad/ui';
 import { Header } from '@/components/layout/header';
 import { StatCard } from '@kezad/ui';
@@ -26,20 +26,66 @@ interface Invoice {
   periodTo: string;
 }
 
+// Customer-friendly display labels
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Draft',
+  SENT: 'Pending Payment',
+  PAID: 'Paid',
+  OVERDUE: 'Overdue',
+  PARTIALLY_PAID: 'Partially Paid',
+  DISPUTED: 'Under Dispute',
+  CANCELLED: 'Cancelled',
+  VOID: 'Void',
+};
+
+const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'destructive' | 'secondary' | 'default' | 'outline'> = {
+  DRAFT: 'secondary',
+  SENT: 'warning',
+  PAID: 'success',
+  OVERDUE: 'destructive',
+  PARTIALLY_PAID: 'warning',
+  DISPUTED: 'destructive',
+  CANCELLED: 'secondary',
+  VOID: 'secondary',
+};
+
+const UTILITY_LABELS: Record<string, string> = {
+  GAS: 'Gas',
+  POWER: 'Power',
+  WATER: 'Water',
+  DISTRICT_COOLING: 'District Cooling',
+};
+
 export default function BillingPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [disputeInvoice, setDisputeInvoice] = useState<Invoice | null>(null);
+  const [disputeReason, setDisputeReason] = useState('');
+  const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery<{ data: Invoice[] }>({
+  const { data: rawInvoices, isLoading } = useQuery({
     queryKey: ['invoices'],
-    queryFn: () => api.get('/billing/invoices').then((r) => r.data),
+    queryFn: () => api.get('/billing/invoices').then((r) => r.data.data),
+  });
+  const invoices = Array.isArray(rawInvoices) ? (rawInvoices as Invoice[]) : [];
+
+  const disputeMutation = useMutation({
+    mutationFn: (body: { contractId?: string; requestType: string; subject: string; description: string }) =>
+      api.post('/service-requests', body),
+    onSuccess: () => {
+      setDisputeInvoice(null);
+      setDisputeReason('');
+      void qc.invalidateQueries({ queryKey: ['invoices'] });
+    },
   });
 
-  const invoices = data?.data ?? [];
   const filtered = invoices.filter((inv) => {
+    const label = STATUS_LABELS[inv.status] ?? inv.status;
+    const utilLabel = UTILITY_LABELS[inv.utilityType] ?? inv.utilityType;
     const matchSearch = !search ||
       inv.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-      inv.utilityType.toLowerCase().includes(search.toLowerCase());
+      utilLabel.toLowerCase().includes(search.toLowerCase()) ||
+      label.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === 'ALL' || inv.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -49,14 +95,20 @@ export default function BillingPage() {
     .reduce((s, i) => s + parseFloat(i.outstandingAmount ?? '0'), 0);
   const overdueCount = invoices.filter((i) => i.status === 'OVERDUE').length;
 
-  async function downloadPdf(invoiceId: string, invoiceNumber: string) {
-    const res = await api.get(`/billing/invoices/${invoiceId}/pdf`, { responseType: 'blob' });
-    const url = URL.createObjectURL(new Blob([res.data as BlobPart]));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${invoiceNumber}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+  async function viewInvoice(invoiceId: string) {
+    const res = await api.get(`/billing/invoices/${invoiceId}/pdf`, { responseType: 'text' });
+    const blob = new Blob([res.data as string], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  }
+
+  function handleDispute() {
+    if (!disputeInvoice || !disputeReason.trim()) return;
+    disputeMutation.mutate({
+      requestType: 'BILLING_DISPUTE',
+      subject: `Dispute: Invoice ${disputeInvoice.invoiceNumber}`,
+      description: `Invoice: ${disputeInvoice.invoiceNumber}\nAmount: AED ${disputeInvoice.totalAmount}\nPeriod: ${disputeInvoice.periodFrom} to ${disputeInvoice.periodTo}\n\nReason: ${disputeReason}`,
+    });
   }
 
   return (
@@ -93,11 +145,11 @@ export default function BillingPage() {
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
                   <option value="ALL">All Status</option>
-                  <option value="DRAFT">Draft</option>
-                  <option value="SENT">Sent</option>
+                  <option value="SENT">Pending Payment</option>
                   <option value="PAID">Paid</option>
                   <option value="OVERDUE">Overdue</option>
                   <option value="PARTIALLY_PAID">Partially Paid</option>
+                  <option value="DISPUTED">Under Dispute</option>
                 </select>
               </div>
             </div>
@@ -118,14 +170,14 @@ export default function BillingPage() {
                     <TableHead>Amount</TableHead>
                     <TableHead>Outstanding</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead></TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filtered.map((inv) => (
                     <TableRow key={inv.id}>
                       <TableCell className="font-mono text-xs font-medium">{inv.invoiceNumber}</TableCell>
-                      <TableCell>{inv.utilityType}</TableCell>
+                      <TableCell className="text-sm">{UTILITY_LABELS[inv.utilityType] ?? inv.utilityType}</TableCell>
                       <TableCell className="text-xs text-gray-500">
                         {formatDate(inv.periodFrom)} – {formatDate(inv.periodTo)}
                       </TableCell>
@@ -135,16 +187,33 @@ export default function BillingPage() {
                       </TableCell>
                       <TableCell className="font-medium">{formatCurrency(inv.totalAmount)}</TableCell>
                       <TableCell>{parseFloat(inv.outstandingAmount ?? '0') > 0 ? formatCurrency(inv.outstandingAmount) : '—'}</TableCell>
-                      <TableCell><Badge variant={statusVariant(inv.status)}>{inv.status}</Badge></TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => downloadPdf(inv.id, inv.invoiceNumber)}
-                          title="Download PDF"
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
+                        <Badge variant={STATUS_VARIANT[inv.status] ?? 'default'}>
+                          {STATUS_LABELS[inv.status] ?? inv.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => viewInvoice(inv.id)}
+                            title="View Invoice PDF"
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                          {['SENT', 'OVERDUE', 'PARTIALLY_PAID'].includes(inv.status) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDisputeInvoice(inv)}
+                              title="Raise Dispute"
+                              className="text-orange-500 hover:text-orange-700 hover:bg-orange-50"
+                            >
+                              <AlertCircle className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -157,6 +226,44 @@ export default function BillingPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Dispute Modal */}
+      <Modal open={!!disputeInvoice} onClose={() => { setDisputeInvoice(null); setDisputeReason(''); }}
+        title="Raise Billing Dispute">
+        {disputeInvoice && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-gray-50 p-4 space-y-1 text-sm">
+              <p><span className="text-gray-500">Invoice:</span> <span className="font-semibold">{disputeInvoice.invoiceNumber}</span></p>
+              <p><span className="text-gray-500">Utility:</span> {UTILITY_LABELS[disputeInvoice.utilityType] ?? disputeInvoice.utilityType}</p>
+              <p><span className="text-gray-500">Amount:</span> <span className="font-semibold">{formatCurrency(disputeInvoice.totalAmount)}</span></p>
+              <p><span className="text-gray-500">Period:</span> {formatDate(disputeInvoice.periodFrom)} – {formatDate(disputeInvoice.periodTo)}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Dispute *</label>
+              <textarea
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 min-h-[100px]"
+                placeholder="Please describe why you are disputing this invoice (e.g., incorrect meter reading, wrong tariff applied, billing period error)..."
+                value={disputeReason}
+                onChange={(e) => setDisputeReason(e.target.value)}
+                rows={4}
+              />
+            </div>
+            {disputeMutation.isError && (
+              <p className="text-sm text-red-600">Failed to submit dispute. Please try again.</p>
+            )}
+          </div>
+        )}
+        <ModalFooter>
+          <Button variant="outline" onClick={() => { setDisputeInvoice(null); setDisputeReason(''); }}>Cancel</Button>
+          <Button
+            onClick={handleDispute}
+            disabled={!disputeReason.trim() || disputeMutation.isPending}
+            className="bg-orange-600 hover:bg-orange-700"
+          >
+            {disputeMutation.isPending ? 'Submitting...' : 'Submit Dispute'}
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

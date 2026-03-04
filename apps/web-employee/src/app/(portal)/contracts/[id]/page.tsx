@@ -162,8 +162,8 @@ export default function ContractDetailPage() {
   return (
     <div className="animate-fade-in">
       {/* Header Banner */}
-      <div className="bg-white border-b">
-        <div className="px-8 py-5 flex items-center justify-between">
+      <div className="kezad-page-header" style={{ display: 'block' }}>
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <a href="/contracts" className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
               <ArrowLeft className="h-5 w-5" />

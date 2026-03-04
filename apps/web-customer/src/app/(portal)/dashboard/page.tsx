@@ -9,6 +9,11 @@ import { api } from '@/lib/api';
 interface Contract { id: string; contractNumber: string; utilityType: string; status: string; startDate: string; }
 interface Invoice { id: string; invoiceNumber: string; status: string; totalAmount: string; outstandingAmount: string; dueDate: string; utilityType: string; currency: string; }
 
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Draft', SENT: 'Pending Payment', PAID: 'Paid', OVERDUE: 'Overdue',
+  PARTIALLY_PAID: 'Partially Paid', DISPUTED: 'Under Dispute', CANCELLED: 'Cancelled',
+};
+
 const UTILITY_META: Record<string, { icon: React.ReactNode; iconClass: string; label: string }> = {
   GAS:              { icon: <Wind className="h-5 w-5 text-white" />,      iconClass: 'icon-amber',  label: 'Gas' },
   POWER:            { icon: <Zap className="h-5 w-5 text-white" />,       iconClass: 'icon-blue',   label: 'Power' },
@@ -17,12 +22,36 @@ const UTILITY_META: Record<string, { icon: React.ReactNode; iconClass: string; l
 };
 
 export default function DashboardPage() {
-  const { data: contracts } = useQuery({ queryKey: ['contracts'], queryFn: () => api.get('/contracts').then((r) => r.data.data as Contract[]) });
-  const { data: invoices }  = useQuery({ queryKey: ['invoices'],  queryFn: () => api.get('/billing/invoices?limit=5').then((r) => r.data.data as Invoice[]) });
+  const contractsQuery = useQuery({
+    queryKey: ['dashboard-contracts'],
+    queryFn: () => api.get('/contracts'),
+  });
+  const invoicesQuery = useQuery({
+    queryKey: ['dashboard-invoices'],
+    queryFn: () => api.get('/billing/invoices?limit=5'),
+  });
 
-  const activeContracts  = contracts?.filter((c) => c.status === 'ACTIVE') ?? [];
-  const pendingInvoices  = invoices?.filter((i) => ['SENT', 'OVERDUE', 'PARTIALLY_PAID'].includes(i.status)) ?? [];
-  const overdueInvoices  = invoices?.filter((i) => i.status === 'OVERDUE') ?? [];
+  // Safely extract arrays — handle any response shape
+  const contracts: Contract[] = (() => {
+    try {
+      const raw = contractsQuery.data;
+      if (!raw) return [];
+      const d = raw.data?.data ?? raw.data;
+      return Array.isArray(d) ? d : [];
+    } catch { return []; }
+  })();
+  const invoices: Invoice[] = (() => {
+    try {
+      const raw = invoicesQuery.data;
+      if (!raw) return [];
+      const d = raw.data?.data ?? raw.data;
+      return Array.isArray(d) ? d : [];
+    } catch { return []; }
+  })();
+
+  const activeContracts  = contracts.filter((c) => c.status === 'ACTIVE');
+  const pendingInvoices  = invoices.filter((i) => ['SENT', 'OVERDUE', 'PARTIALLY_PAID'].includes(i.status));
+  const overdueInvoices  = invoices.filter((i) => i.status === 'OVERDUE');
   const totalOutstanding = pendingInvoices.reduce((sum, i) => sum + parseFloat(i.outstandingAmount ?? i.totalAmount), 0);
 
   const quickActions = [
@@ -125,7 +154,7 @@ export default function DashboardPage() {
             <a href="/billing" className="text-xs font-semibold text-primary bg-primary/8 px-3 py-1.5 rounded-lg">View all →</a>
           </CardHeader>
           <CardContent className="p-0">
-            {!invoices?.length ? (
+            {!invoices.length ? (
               <div className="flex flex-col items-center justify-center py-12 gap-3">
                 <div className="w-14 h-14 rounded-2xl icon-teal flex items-center justify-center"><Receipt className="h-6 w-6 text-white" /></div>
                 <p className="text-sm font-medium text-gray-400">No invoices yet</p>
@@ -139,7 +168,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900">{inv.invoiceNumber}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{inv.utilityType.replace('_', ' ')} · Due {formatDate(inv.dueDate)}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{inv.utilityType === 'DISTRICT_COOLING' ? 'District Cooling' : inv.utilityType.charAt(0) + inv.utilityType.slice(1).toLowerCase()} · Due {formatDate(inv.dueDate)}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-gray-900">{formatCurrency(Number(inv.totalAmount), inv.currency)}</p>
@@ -147,7 +176,7 @@ export default function DashboardPage() {
                         <p className="text-xs text-red-500 mt-0.5">{formatCurrency(Number(inv.outstandingAmount), inv.currency)} outstanding</p>
                       )}
                     </div>
-                    <Badge variant={statusVariant(inv.status)}>{inv.status}</Badge>
+                    <Badge variant={statusVariant(inv.status)}>{STATUS_LABELS[inv.status] ?? inv.status}</Badge>
                   </div>
                 ))}
               </div>

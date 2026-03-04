@@ -67,9 +67,11 @@ export default function CustomerDetailPage() {
   if (isLoading) {
     return (
       <div className="animate-fade-in">
-        <div className="bg-white border-b px-8 py-5">
-          <div className="h-7 w-48 bg-gray-200 rounded animate-pulse mb-2" />
-          <div className="h-4 w-72 bg-gray-100 rounded animate-pulse" />
+        <div className="kezad-page-header">
+          <div>
+            <div className="h-7 w-48 bg-gray-200 rounded animate-pulse mb-2" />
+            <div className="h-4 w-72 bg-gray-100 rounded animate-pulse" />
+          </div>
         </div>
         <div className="p-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
           {[1, 2, 3].map((i) => <div key={i} className="h-64 bg-gray-100 rounded-xl animate-pulse" />)}
@@ -93,7 +95,7 @@ export default function CustomerDetailPage() {
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <div className="bg-white border-b px-8 py-5 flex items-center justify-between">
+      <div className="kezad-page-header">
         <div className="flex items-center gap-4">
           <a href="/customers" className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
             <ArrowLeft className="h-5 w-5" />

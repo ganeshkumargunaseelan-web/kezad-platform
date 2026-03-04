@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, FileText, BarChart3, Receipt, CreditCard,
-  Settings, HelpCircle, Zap, LogOut, Bell, Building2,
+  Settings, HelpCircle, LogOut, Bell, Building2,
 } from 'lucide-react';
 import { cn } from '@kezad/ui';
 import { useAuthStore } from '@/lib/auth-store';
@@ -37,17 +37,9 @@ export function Sidebar() {
     <aside className="w-64 min-h-screen flex flex-col bg-white border-r border-gray-100"
       style={{ boxShadow: '2px 0 16px rgba(0,0,0,0.04)' }}>
       {/* Logo */}
-      <div className="p-6 border-b border-gray-100">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md"
-            style={{ background: 'linear-gradient(135deg, #33BFBF, #006B6B)' }}>
-            <Zap className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <p className="font-bold text-sm text-gray-900">KEZAD Portal</p>
-            <p className="text-xs text-gray-400">Customer</p>
-          </div>
-        </div>
+      <div className="px-6 py-4 border-b border-gray-100">
+        <img src="/kezad-logo.png" alt="KEZAD Group" className="h-8 w-auto" />
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mt-1.5">Customer Portal</p>
       </div>
 
       {/* Navigation */}

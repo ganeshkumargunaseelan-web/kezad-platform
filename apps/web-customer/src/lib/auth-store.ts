@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useEffect, useState } from 'react';
 
 interface User {
   id: string;
@@ -50,3 +51,16 @@ export const useAuthStore = create<AuthState>()(
     { name: 'kezad-customer-auth', partialize: (s) => ({ user: s.user, accessToken: s.accessToken, refreshToken: s.refreshToken }) },
   ),
 );
+
+/**
+ * Hook to wait for Zustand persist hydration.
+ * Returns true once the store has finished rehydrating from localStorage.
+ */
+export function useAuthHydrated(): boolean {
+  const [hydrated, setHydrated] = useState(useAuthStore.persist.hasHydrated());
+  useEffect(() => {
+    const unsub = useAuthStore.persist.onFinishHydration(() => setHydrated(true));
+    return () => unsub();
+  }, []);
+  return hydrated;
+}

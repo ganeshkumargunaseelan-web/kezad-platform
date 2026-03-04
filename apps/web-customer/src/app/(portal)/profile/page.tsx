@@ -8,11 +8,10 @@ import { api } from '@/lib/api';
 
 interface CustomerContact {
   id: string;
-  firstName: string;
-  lastName: string;
+  name: string;
   email: string;
   phone: string | null;
-  jobTitle: string | null;
+  role: string | null;
   isPrimary: boolean;
 }
 
@@ -146,10 +145,10 @@ export default function ProfilePage() {
               <>
                 <InfoRow
                   label="Name"
-                  value={`${primaryContact.firstName} ${primaryContact.lastName}`}
+                  value={primaryContact.name}
                   icon={<User className="h-4 w-4" />}
                 />
-                <InfoRow label="Job Title" value={primaryContact.jobTitle} />
+                <InfoRow label="Role" value={primaryContact.role} />
                 <InfoRow label="Email" value={<a href={`mailto:${primaryContact.email}`} className="text-primary hover:underline">{primaryContact.email}</a>} icon={<Mail className="h-4 w-4" />} />
                 <InfoRow label="Phone" value={primaryContact.phone} icon={<Phone className="h-4 w-4" />} />
               </>
@@ -204,11 +203,11 @@ export default function ProfilePage() {
                   <div key={c.id} className="px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">
-                        <span className="text-xs font-bold text-gray-600">{c.firstName.charAt(0)}{c.lastName.charAt(0)}</span>
+                        <span className="text-xs font-bold text-gray-600">{c.name?.charAt(0) ?? ''}{c.name?.split(' ')[1]?.charAt(0) ?? ''}</span>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{c.firstName} {c.lastName}</p>
-                        <p className="text-xs text-gray-500">{c.jobTitle ?? 'Contact'}</p>
+                        <p className="text-sm font-medium text-gray-900">{c.name}</p>
+                        <p className="text-xs text-gray-500">{c.role ?? 'Contact'}</p>
                       </div>
                     </div>
                     <div className="text-right">

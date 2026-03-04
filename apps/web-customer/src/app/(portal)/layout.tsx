@@ -1,21 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/lib/auth-store';
+import { useAuthStore, useAuthHydrated } from '@/lib/auth-store';
 import { Sidebar } from '@/components/layout/sidebar';
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
-  const [mounted, setMounted] = useState(false);
+  const hydrated = useAuthHydrated();
 
   useEffect(() => {
-    setMounted(true);
-    if (!isAuthenticated()) router.replace('/login');
-  }, [isAuthenticated, router]);
+    if (hydrated && !isAuthenticated()) router.replace('/login');
+  }, [hydrated, isAuthenticated, router]);
 
-  if (!mounted || !isAuthenticated()) return null;
+  // Wait for Zustand to rehydrate from localStorage before rendering anything
+  if (!hydrated) return null;
+  if (!isAuthenticated()) return null;
 
   return (
     <div className="flex h-screen overflow-hidden">

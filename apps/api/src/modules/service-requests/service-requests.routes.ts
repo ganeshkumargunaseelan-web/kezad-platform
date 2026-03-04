@@ -58,6 +58,28 @@ export default async function serviceRequestsRoutes(fastify: FastifyInstance): P
     return reply.send(buildSuccessResponse(sr));
   });
 
+  // POST /service-requests — create (customer)
+  fastify.post('/', {
+    preHandler: [fastify.authenticate],
+    schema: { tags: ['service-requests'], summary: 'Create service request' },
+  }, async (req, reply) => {
+    const body = req.body as { requestType: string; subject: string; description: string };
+    const count = await fastify.db.serviceRequest.count();
+    const requestNumber = `SR-${new Date().getFullYear()}-${String(count + 1).padStart(4, '0')}`;
+
+    const sr = await fastify.db.serviceRequest.create({
+      data: {
+        requestNumber,
+        customerId: req.user.customerId ?? '',
+        requestType: body.requestType as 'ACTIVATION' | 'DEACTIVATION' | 'TECHNICAL_ISSUE' | 'METER_VERIFICATION' | 'BILLING_DISPUTE' | 'OTHER',
+        subject: body.subject,
+        description: body.description,
+        slaDeadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+    return reply.status(201).send(buildSuccessResponse(sr));
+  });
+
   // PATCH /service-requests/:id — update status/assign
   fastify.patch('/:id', {
     preHandler: [fastify.authorize(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR'])],

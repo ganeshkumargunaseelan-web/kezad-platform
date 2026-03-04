@@ -51,7 +51,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="bg-white border-b px-8 py-5 flex items-center justify-between">
+      <div className="kezad-page-header">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold text-gray-900">Notifications</h1>
           {unreadCount > 0 && (

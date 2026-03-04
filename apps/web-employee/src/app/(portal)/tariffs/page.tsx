@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Wind, Zap, Droplets, Snowflake, CheckCircle2, Clock, Tag, SendHorizonal } from 'lucide-react';
+import { Plus, Wind, Zap, Droplets, Snowflake, CheckCircle2, Clock, Tag, SendHorizonal, Eye } from 'lucide-react';
 import {
   Card, CardContent, CardHeader, CardTitle,
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -46,6 +46,7 @@ const TARIFF_TYPES = ['FIXED', 'TIERED', 'TIME_OF_USE', 'DEMAND', 'BLOCK_RATE'];
 export default function TariffsPage() {
   const [selectedType, setSelectedType] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [viewTariff, setViewTariff] = useState<Tariff | null>(null);
   const [submitMode, setSubmitMode] = useState<'direct' | 'workflow'>('direct');
   const [form, setForm] = useState({
     utilityType: 'GAS',
@@ -60,7 +61,6 @@ export default function TariffsPage() {
     unit: '',
     changeJustification: '',
   });
-  // Workflow approval result notification
   const [wfSuccess, setWfSuccess] = useState(false);
   const qc = useQueryClient();
 
@@ -123,7 +123,7 @@ export default function TariffsPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="bg-white border-b px-8 py-5 flex items-center justify-between">
+      <div className="kezad-page-header">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Tariff Management</h1>
           <p className="text-sm text-gray-500">Version-controlled utility tariffs and rate schedules</p>
@@ -146,7 +146,11 @@ export default function TariffsPage() {
           {activeTariffs.map(({ type, tariff }) => {
             const meta = UTILITY_META[type];
             return (
-              <Card key={type} className={`border-2 ${meta.bg}`}>
+              <Card
+                key={type}
+                className={`border-2 cursor-pointer transition-all hover:shadow-md ${meta.bg} ${tariff ? '' : 'opacity-60'}`}
+                onClick={() => tariff && setViewTariff(tariff)}
+              >
                 <CardContent className="p-5">
                   <div className="flex items-center gap-3 mb-3">
                     <div className={`${meta.color}`}>{meta.icon}</div>
@@ -156,7 +160,12 @@ export default function TariffsPage() {
                     <>
                       <p className="text-sm font-medium text-gray-900 truncate">{tariff.name}</p>
                       <p className="text-xs text-gray-500 mt-1">{tariff.tariffType.replace('_', ' ')}</p>
-                      <div className="flex items-center gap-1.5 mt-3">
+                      {tariff.rates[0] && (
+                        <p className="text-lg font-bold text-gray-900 mt-2">
+                          {Number(tariff.rates[0].rate).toFixed(4)} <span className="text-xs text-gray-400 font-normal">/{tariff.rates[0].unit}</span>
+                        </p>
+                      )}
+                      <div className="flex items-center gap-1.5 mt-2">
                         <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
                         <span className="text-xs text-green-600 font-medium">Active since {formatDate(tariff.effectiveFrom)}</span>
                       </div>
@@ -205,13 +214,13 @@ export default function TariffsPage() {
           <CardContent className="p-0">
             {isLoading ? (
               <div className="p-6 space-y-3">
-                {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />)}
+                {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-14 bg-gray-50 rounded-lg animate-pulse" />)}
               </div>
             ) : !filtered.length ? (
               <div className="text-center py-16">
-                <Tag className="h-12 w-12 text-gray-200 mx-auto mb-3" />
+                <Tag className="h-14 w-14 text-gray-200 mx-auto mb-3" />
                 <p className="text-gray-500 font-medium">No tariffs found</p>
-                <p className="text-sm text-gray-400">Create the first tariff to begin billing operations</p>
+                <p className="text-sm text-gray-400 mt-1">Create the first tariff to begin billing operations</p>
                 <Button className="mt-4" size="sm" onClick={() => setShowModal(true)}>
                   <Plus className="h-4 w-4 mr-2" /> Create Tariff
                 </Button>
@@ -228,13 +237,14 @@ export default function TariffsPage() {
                     <TableHead>Effective To</TableHead>
                     <TableHead>Rates</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filtered.map((t) => {
                     const meta = UTILITY_META[t.utilityType];
                     return (
-                      <TableRow key={t.id}>
+                      <TableRow key={t.id} className="cursor-pointer hover:bg-gray-50" onClick={() => setViewTariff(t)}>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${meta?.color ?? 'text-gray-400'} ${meta?.bg.split(' ')[0] ?? 'bg-gray-50'}`}>
@@ -265,6 +275,11 @@ export default function TariffsPage() {
                             {t.isActive ? 'Active' : 'Superseded'}
                           </Badge>
                         </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setViewTariff(t); }}>
+                            <Eye className="h-4 w-4 text-gray-400" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -274,6 +289,92 @@ export default function TariffsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* View Tariff Detail Modal */}
+      <Modal open={!!viewTariff} onClose={() => setViewTariff(null)} title="Tariff Details" size="lg">
+        {viewTariff && (() => {
+          const meta = UTILITY_META[viewTariff.utilityType];
+          return (
+            <div className="space-y-5">
+              {/* Header */}
+              <div className={`rounded-xl border-2 p-5 ${meta?.bg ?? 'bg-gray-50 border-gray-200'}`}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={meta?.color ?? 'text-gray-500'}>{meta?.icon}</div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">{viewTariff.name}</h3>
+                    <p className="text-sm text-gray-500">{viewTariff.description ?? 'No description'}</p>
+                  </div>
+                  <div className="ml-auto">
+                    <Badge variant={viewTariff.isActive ? 'success' : 'secondary'}>
+                      {viewTariff.isActive ? 'Active' : 'Superseded'}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Info Grid */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-1">Utility Type</p>
+                  <p className="text-sm font-medium text-gray-900">{meta?.label ?? viewTariff.utilityType}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-1">Tariff Type</p>
+                  <p className="text-sm font-medium text-gray-900">{viewTariff.tariffType.replace(/_/g, ' ')}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-1">Currency</p>
+                  <p className="text-sm font-medium text-gray-900">{viewTariff.currency}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-1">Effective From</p>
+                  <p className="text-sm font-medium text-gray-900">{formatDate(viewTariff.effectiveFrom)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-1">Effective To</p>
+                  <p className="text-sm font-medium text-gray-900">{viewTariff.effectiveTo ? formatDate(viewTariff.effectiveTo) : 'Open-ended'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-1">Created</p>
+                  <p className="text-sm font-medium text-gray-900">{formatDate(viewTariff.createdAt)}</p>
+                </div>
+              </div>
+
+              {/* Rate Schedule */}
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-3">Rate Schedule</p>
+                <div className="border rounded-xl overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Rate Code</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="text-right">Rate ({viewTariff.currency})</TableHead>
+                        <TableHead>Unit</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {viewTariff.rates.map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell className="font-mono text-sm font-semibold text-gray-900">{r.rateKey}</TableCell>
+                          <TableCell className="text-sm text-gray-500">{r.description ?? '—'}</TableCell>
+                          <TableCell className="text-right text-lg font-bold text-primary">{Number(r.rate).toFixed(6)}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{r.unit}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+        <ModalFooter>
+          <Button variant="outline" onClick={() => setViewTariff(null)}>Close</Button>
+        </ModalFooter>
+      </Modal>
 
       {/* Create Tariff Modal */}
       <Modal open={showModal} onClose={() => { setShowModal(false); setSubmitMode('direct'); }} title="Create New Tariff" size="lg">
