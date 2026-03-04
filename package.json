@@ -16,7 +16,8 @@
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
     "db:seed": "turbo run db:seed",
-    "db:studio": "cd packages/database && npx prisma studio"
+    "db:studio": "cd packages/database && npx prisma studio",
+    "start": "sh start.sh"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",
