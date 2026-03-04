@@ -6,7 +6,7 @@
   "main": "./src/server.ts",
   "scripts": {
     "dev": "node --env-file=.env --import=tsx/esm --watch src/server.ts",
-    "build": "tsc && tsc-alias",
+    "build": "npx tsc && npx tsc-alias",
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -41,6 +41,7 @@
     "@types/node": "^20.14.2",
     "@types/supertest": "^6.0.2",
     "supertest": "^7.0.0",
+    "tsc-alias": "^1.8.16",
     "tsx": "^4.15.1",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"
