@@ -71,7 +71,12 @@ async function buildServer() {
   await fastify.register(cors, {
     origin:
       env.NODE_ENV === 'production'
-        ? ['https://customer.kezad.ae', 'https://portal.kezad.ae']
+        ? [
+            'https://customer.kezad.ae',
+            'https://portal.kezad.ae',
+            'https://kezad-platform.vercel.app',
+            'https://kezad-employee-portal.vercel.app',
+          ]
         : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
